@@ -9,7 +9,8 @@ filename = "C://Users//Prakhar Singh//Desktop//Prakhar//Sample Docs//DataDiction
 # Load BERT model for semantic encoding
 model = SentenceTransformer('paraphrase-MiniLM-L6-v2')
 
-def search_excel_for_columns(search_term):
+# Can change the threshold value here to see expected results
+def search_excel_for_columns(search_term, threshold=0.3):
     try:
         df = pd.read_excel(filename)
     except FileNotFoundError:
@@ -23,18 +24,21 @@ def search_excel_for_columns(search_term):
     search_embedding = model.encode(search_term, convert_to_tensor=True)
     text_embeddings = model.encode(combined_text.tolist(), convert_to_tensor=True)
     cos_scores = util.pytorch_cos_sim(search_embedding, text_embeddings)[0]
-    top_row_index = cos_scores.argmax().item()
-    most_similar_row = df.iloc[top_row_index]
+    print("Cosine Similarity Scores:", cos_scores)
+    matching_indices = (cos_scores >= threshold).nonzero().flatten().tolist()
     
-    # Convert ID from int64 to int
-    result = {
-        'ID': int(most_similar_row['ID']),
-        'Dashboard': str(most_similar_row['Dashboard']),
-        'KPI': str(most_similar_row['KPI']),
-        'Description': str(most_similar_row['Description'])
-    }
+    # Collect all matching rows
+    matching_results = []
+    for index in matching_indices:
+        row = df.iloc[index]
+        matching_results.append({
+            'ID': int(row['ID']),
+            'Dashboard': str(row['Dashboard']),
+            'KPI': str(row['KPI']),
+            'Description': str(row['Description'])
+        })
     
-    return result, None
+    return matching_results, None
 
 @app.route('/search', methods=['GET'])
 def search():
@@ -44,10 +48,10 @@ def search():
         return jsonify({'error': 'Search term is required'}), 400
     
     try:
-        result, error = search_excel_for_columns(search_term)
+        results, error = search_excel_for_columns(search_term)
         if error:
             return jsonify({'error': error}), 404
-        return jsonify({'result': result})
+        return jsonify({'result': results})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
